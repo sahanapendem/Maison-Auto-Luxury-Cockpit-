@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maison Auto — Cockpit</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ===== Tokens (live-updated by the Ambient Lighting widget) ===== */
+:root{--accent:#dfa875;--glow:#dfa87566;--bg2:#2b1d14;--stroke:#f6d9b8;--btn:#dfa87555;--text:#ecebe6;--muted:#8d8d88;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#ecebe6}}
+:root[data-theme="dark"]{--text:#ecebe6}
+*{box-sizing:border-box}
+html,body{height:100%;width:100vw;margin:0;overflow:hidden}
+body{display:flex;flex-direction:column;background:radial-gradient(ellipse at 50% 0,var(--bg2),#0b0b0b 65%);color:var(--text);font:300 14px Inter,system-ui,sans-serif;transition:background .6s}
+h2,h3{font-family:'Playfair Display',serif;font-weight:500;margin:0}
+.glass{background:rgba(255,255,255,.05);backdrop-filter:blur(14px);border:1px solid var(--btn);border-radius:18px;box-shadow:0 0 30px var(--glow),inset 0 1px 0 rgba(255,255,255,.08)}
+button{font:600 .66rem Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;padding:10px 16px;border-radius:30px;border:1px solid var(--btn);background:rgba(0,0,0,.35);color:var(--text);cursor:pointer;transition:all .3s;white-space:nowrap}
+button:hover,button.on{background:var(--accent);color:#111;box-shadow:0 0 20px var(--glow);transform:translateY(-1px)}
+header{display:flex;align-items:center;gap:14px;padding:10px 14px;flex:none}
+header b{font:500 1rem 'Playfair Display',serif;letter-spacing:.25em;color:var(--accent);text-shadow:0 0 14px var(--glow)}
+nav{display:flex;gap:8px;overflow-x:auto;flex:1;scrollbar-width:none;padding:2px}
+nav::-webkit-scrollbar{display:none}
+main{flex:1;position:relative;min-height:0}
+.mode{position:absolute;inset:0;display:flex;gap:12px;padding:0 12px 12px;opacity:0;pointer-events:none;transform:scale(.97) translateY(10px);transition:opacity .5s,transform .5s}
+.mode.on{opacity:1;pointer-events:auto;transform:none}
+.cv{flex:1;min-width:0;min-height:0;position:relative;padding:6px;display:flex;justify-content:center;align-items:center}
+.cv canvas,.cv video{width:100%;height:100%;display:block;border-radius:13px;touch-action:none}
+.side{width:230px;flex:none;padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;min-height:0}
+.side h3{font-size:1.15rem;color:var(--accent)}
+.side p,.hint{color:var(--muted);font-size:.74rem;line-height:1.5;margin:0}
+.side label{font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:block}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:6px}
+.sw{width:34px;height:34px;border-radius:50%;padding:0;border:2px solid #fff3}
+@media(max-width:760px){.mode{flex-direction:column}.side{width:auto;flex:none;max-height:38%}header b{display:none}}
+#pad,#qpad{background:#0d0d0d;cursor:crosshair;border:1px solid var(--btn)}
+/* splash */
+#splash{position:fixed;inset:0;z-index:99;background:#000;clip-path:inset(0);transition:clip-path 1s cubic-bezier(.7,0,.2,1)}
+#splash.open{clip-path:inset(50% 0 50% 0)}
+#trail{position:absolute;top:50%;left:0;height:3px;width:0;background:linear-gradient(90deg,transparent,var(--accent));box-shadow:0 0 30px 6px var(--glow);transform:translateY(-50%)}
+#wheel{position:absolute;top:50%;left:0;width:150px;margin:-75px 0 0 -75px;filter:drop-shadow(0 0 20px var(--glow))}
+/* modal / toast */
+#modal{position:fixed;inset:0;z-index:50;display:none;place-items:center;background:rgba(0,0,0,.75);backdrop-filter:blur(10px);padding:14px}
+#modal.show{display:grid}
+#card{max-width:620px;width:100%;max-height:94%;overflow:auto;padding:20px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.stat{border:1px solid #fff2;border-radius:12px;padding:8px;text-align:center}
+.stat small{display:block;color:var(--muted);font-size:.55rem;letter-spacing:.15em;text-transform:uppercase}
+.stat b{font:500 .95rem 'Playfair Display',serif;color:var(--accent)}
+#toast{position:fixed;left:50%;top:70px;transform:translate(-50%,-20px);z-index:60;opacity:0;transition:all .4s;padding:10px 20px;pointer-events:none}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#light{position:fixed;left:50%;bottom:14px;transform:translate(-50%,0);z-index:40;display:flex;gap:10px;padding:10px 16px;align-items:center;transition:all .4s}
+#light.off{opacity:0;pointer-events:none;transform:translate(-50%,30px)}
+/* game HUD */
+.hud{display:flex;flex-direction:column;gap:10px}
+#kph{font:500 2.2rem 'Playfair Display',serif;color:var(--accent);text-shadow:0 0 16px var(--glow)}
+.gears{display:flex;gap:6px}.gears span{width:28px;text-align:center;padding:4px;border-radius:6px;border:1px solid #fff2;color:var(--muted)}.gears span.on{background:var(--accent);color:#111;box-shadow:0 0 14px var(--glow)}
+.meter{height:8px;border-radius:5px;background:#fff1;overflow:hidden}.meter i{display:block;height:100%;width:0;background:var(--accent);box-shadow:0 0 10px var(--glow)}
+#gm{position:relative}#gm i{position:absolute;width:10px;left:50%;background:var(--accent)}
+</style></head><body>
+
+<div id="splash"><div id="trail"></div>
+<svg id="wheel" viewBox="-100 -100 200 200"><circle r="96" fill="#050505"/><circle r="86" fill="#1a1a1a" stroke="#d4af37" stroke-width="3"/><g id="spk"></g><circle r="16" fill="#111" stroke="#d4af37" stroke-width="2"/><circle r="5" fill="#d4af37"/></svg></div>
+
+<header class="glass" style="margin:10px 12px 8px;border-radius:40px"><b>MAISON AUTO</b>
+<nav id="nav"><button data-m="draw" class="on">Draw &amp; Identify</button><button data-m="ar">AR Apparel Try-On</button><button data-m="cfg">3D Configurator</button><button data-m="game">HUD Mini-Game</button><button data-m="quiz">Logo Quiz</button><button id="lbtn">Ambient Lighting</button></nav></header>
+
+<main>
+<!-- 1. DRAW & IDENTIFY -->
+<section class="mode on" id="m-draw"><div class="cv glass"><canvas id="pad"></canvas></div>
+<div class="side glass"><h3>Draw Logo</h3><p>Sketch a car emblem: ringed star, blue roundel, four rings, crested shield, or a T.</p>
+<div class="row"><button id="pclr">Clear</button><button id="pid" class="on">Identify Logo</button></div><p id="phint"></p>
+<label>Secret garage</label><div class="row" id="gal"></div></div></section>
+
+<!-- 2. AR -->
+<section class="mode" id="m-ar"><div class="cv glass"><canvas id="arc"></canvas><video id="vid" playsinline muted style="display:none"></video>
+<img id="snap" style="position:absolute;inset:14px;width:calc(100% - 28px);height:calc(100% - 28px);object-fit:contain;display:none;background:#000d;border-radius:12px;cursor:pointer" alt="Snapshot"></div>
+<div class="side glass"><h3>AR Try-On</h3><p id="armsg">Starting camera…</p>
+<div class="row" id="jk"></div>
+<label>Scale</label><input type="range" id="sc" min="40" max="200" value="100">
+<label>Horizontal</label><input type="range" id="sx" min="-30" max="30" value="0">
+<label>Vertical</label><input type="range" id="sy" min="-30" max="30" value="0">
+<label>Opacity</label><input type="range" id="so" min="20" max="100" value="90">
+<button id="shot" class="on">Snap Photo</button></div></section>
+
+<!-- 3. 3D -->
+<section class="mode" id="m-cfg"><div class="cv glass"><canvas id="cfgc"></canvas></div>
+<div class="side glass"><h3>Configurator</h3><p>Drag to rotate 360°. Choose a paint.</p><div class="row" id="paints"></div><p id="pname" style="color:var(--accent)"></p></div></section>
+
+<!-- 4. GAME -->
+<section class="mode" id="m-game"><div class="cv glass"><canvas id="game" width="360" height="560" style="width:auto;max-width:100%;aspect-ratio:9/14"></canvas>
+<div id="ov" style="position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:10px;background:#000a;border-radius:18px"><h3 id="ovt" style="font-size:1.8rem;color:var(--accent)">Ready?</h3><p class="hint">← → / A D steer · Space = Turbo · Tap sides on touch</p><div><button class="on" id="gs">Start Engine</button></div></div></div>
+<div class="side glass hud"><div><label>Speed</label><span id="kph">0</span> <button id="unit" style="padding:4px 10px">KPH</button></div>
+<div class="gears" id="gears"><span>R</span><span class="on">N</span><span>D</span><span>S</span></div>
+<div><label>G-Force</label><div class="meter" id="gm"><i id="gi" style="height:100%"></i></div></div>
+<div><label>Turbo</label><div class="meter"><i id="tb" style="width:100%"></i></div></div>
+<div><label>Score · Best</label><b id="sc2" style="font:500 1.2rem 'Playfair Display'">0 · 0</b></div>
+<div class="row"><button id="gl">◀</button><button id="gr">▶</button><button id="gt">Turbo</button></div></div></section>
+
+<!-- 5. QUIZ -->
+<section class="mode" id="m-quiz"><div class="cv glass"><canvas id="qpad"></canvas></div>
+<div class="side glass"><h3>Logo Memory</h3><p id="clue">Press Start. You get 15 seconds to draw the emblem from memory.</p>
+<div style="font:500 2.6rem 'Playfair Display';color:var(--accent)" id="tm">15</div>
+<div class="row"><button id="qs" class="on">Start Round</button><button id="qd">Submit</button><button id="qc">Clear</button></div><p id="qres"></p></div></section>
+</main>
+
+<!-- Ambient lighting widget -->
+<div id="light" class="glass off"></div>
+<div id="toast" class="glass"></div>
+<div id="modal"><div id="card" class="glass"></div></div>
+
+<script>
+const $=id=>document.getElementById(id),R=document.documentElement;
+let ACC='#dfa875',STROKE='#f6d9b8';
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2400)}
+
+/* ===== 1. Splash: wheel rolls across leaving a light trail, then opens ===== */
+(()=>{const g=$('spk');for(let i=0;i<10;i++)g.insertAdjacentHTML('beforeend',`<path d="M-5 -14 L-8 -70 Q0 -76 8 -70 L5 -14Z" fill="#c9ccd1" stroke="#333" stroke-width=".6" transform="rotate(${i*36})"/>`);
+const w=$('wheel'),tr=$('trail'),t0=performance.now();
+function f(t){const p=Math.min((t-t0)/2600,1),e=p*p*(3-2*p),x=-80+(innerWidth+160)*e;
+w.style.left=x+'px';w.style.transform=`rotate(${e*900}deg)`;tr.style.width=x+'px';
+if(p<1)requestAnimationFrame(f);else{$('splash').classList.add('open');setTimeout(()=>$('splash').remove(),1100)}}
+requestAnimationFrame(f)})();
+
+/* ===== Navigation (no page scroll) ===== */
+let cur='draw';
+const hooks={};
+document.querySelectorAll('nav [data-m]').forEach(b=>b.onclick=()=>go(b.dataset.m));
+function go(m){document.querySelectorAll('nav [data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+document.querySelectorAll('.mode').forEach(s=>s.classList.toggle('on',s.id==='m-'+m));
+const old=cur;cur=m;hooks[old]&&hooks[old].off&&hooks[old].off();setTimeout(()=>hooks[m]&&hooks[m].on&&hooks[m].on(),60)}
+addEventListener('resize',()=>hooks[cur]&&hooks[cur].on&&hooks[cur].on());
+
+/* ===== Ambient lighting presets ===== */
+const T=[['Rose Gold','#dfa875','#2b1d14','#f6d9b8'],['Cyber Purple','#9d4edd','#10002b','#d9b3ff'],['Silver','#e0e0e0','#1a1a1a','#ffffff'],['Racing Red','#ff003c','#200005','#ff8aa3'],['Emerald','#00f5d4','#00201a','#b5fff4']];
+const L=$('light');T.forEach((t,i)=>{const b=document.createElement('button');b.className='sw';b.title=t[0];b.style.background=t[1];b.onclick=()=>theme(i);L.appendChild(b)});
+function theme(i){const[,a,b,s]=T[i];R.style.setProperty('--accent',a);R.style.setProperty('--glow',a+'66');R.style.setProperty('--bg2',b);R.style.setProperty('--stroke',s);R.style.setProperty('--btn',a+'55');ACC=a;STROKE=s;
+if(window.ring){ring.material.color.set(a);rim.color.set(a)}toast(T[i][0])}
+$('lbtn').onclick=()=>{L.classList.toggle('off')};
+
+/* ===== Drawing pad factory ===== */
+function mkPad(cv){const c=cv.getContext('2d'),P={s:[],cur:null};
+P.fit=()=>{cv.width=cv.clientWidth;cv.height=cv.clientHeight;P.s=[]};
+const pos=e=>{const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);P.cur=[pos(e)];P.s.push(P.cur)};
+cv.onpointermove=e=>{if(!P.cur)return;const p=pos(e),q=P.cur.at(-1);P.cur.push(p);c.lineCap=c.lineJoin='round';c.lineWidth=6;c.strokeStyle=STROKE;c.shadowColor=ACC;c.shadowBlur=14;c.beginPath();c.moveTo(q.x,q.y);c.lineTo(p.x,p.y);c.stroke()};
+cv.onpointerup=cv.onpointercancel=()=>P.cur=null;
+P.clear=()=>{P.s=[];c.clearRect(0,0,cv.width,cv.height)};return P}
+
+/* ===== Stroke classifier (rule-based vector features) ===== */
+function classify(S0){const pts=S0.flat();if(pts.length<8)return null;
+const bb=a=>{const x=a.map(p=>p.x),y=a.map(p=>p.y),x0=Math.min(...x),x1=Math.max(...x),y0=Math.min(...y),y1=Math.max(...y);return{w:x1-x0,h:y1-y0,cx:(x0+x1)/2,cy:(y0+y1)/2}};
+const all=bb(pts),M=Math.max(all.w,all.h),asp=all.w/(all.h||1);
+const S=S0.filter(s=>s.length>3).map(s=>{const b=bb(s),d=Math.hypot(s[0].x-s.at(-1).x,s[0].y-s.at(-1).y),cl=d<.3*Math.max(b.w,b.h)&&Math.max(b.w,b.h)>.25*M;
+const r=s.map(p=>Math.hypot(p.x-b.cx,p.y-b.cy)),m=r.reduce((a,c)=>a+c)/r.length,cv=Math.sqrt(r.reduce((a,c)=>a+(c-m)**2,0)/r.length)/m,ar=b.w/(b.h||1);
+return{b,cl,ar,circ:cl&&cv<.22&&ar>.7&&ar<1.45}});
+if(S.filter(s=>s.circ).length>=3&&asp>1.5)return'audi';
+const cl=S.filter(s=>s.cl).sort((a,b)=>b.b.w*b.b.h-a.b.w*a.b.h);
+if(cl.length){const o=cl[0],n=S.filter(s=>s!==o&&Math.abs(s.b.cx-o.b.cx)<o.b.w/2&&Math.abs(s.b.cy-o.b.cy)<o.b.h/2).length;
+if(o.circ)return n>=3?'mercedes':n>=1?'bmw':null;
+return n>=3?'porsche':n>=1?(o.ar>.9?'lamborghini':'ferrari'):null}
+const wide=S.find(s=>s.b.w>all.w*.6&&s.b.h<all.h*.4),stem=S.find(s=>s.b.h>all.h*.55&&s.b.w<all.w*.35);
+return wide&&stem?'tesla':null}
+
+/* ===== Brand data (cyl/eng drive the sound synthesizer) ===== */
+const B={porsche:{n:'Porsche',m:'911 GT3 RS',z:'3.0 s',t:'184 mph',hp:'518 hp',e:'v8',c:'#e0b040',clue:'A crested shield with a prancing animal at its heart.'},
+mercedes:{n:'Mercedes-Benz',m:'AMG GT 63 S',z:'3.1 s',t:'196 mph',hp:'630 hp',e:'v8',c:'#c9ccd1',clue:'A ring cradling a three-pointed star.'},
+bmw:{n:'BMW',m:'M4 Competition',z:'3.4 s',t:'180 mph',hp:'503 hp',e:'v8',c:'#3b8cff',clue:'A black ring split into blue and white quarters.'},
+audi:{n:'Audi',m:'RS e-tron GT',z:'3.1 s',t:'155 mph',hp:'637 hp',e:'ev',c:'#e23b3b',clue:'Four interlocked rings in a row.'},
+ferrari:{n:'Ferrari',m:'SF90 Stradale',z:'2.5 s',t:'211 mph',hp:'986 hp',e:'v10',c:'#e01b24',clue:'A shield with a prancing horse on yellow.'},
+lamborghini:{n:'Lamborghini',m:'Revuelto',z:'2.5 s',t:'217 mph',hp:'1001 hp',e:'v12',c:'#f2d11f',clue:'A shield with a charging bull.'},
+tesla:{n:'Tesla',m:'Model S Plaid',z:'1.99 s',t:'200 mph',hp:'1020 hp',e:'ev',c:'#ff3b4e',clue:'A stylised letter T.'},
+pagani:{n:'Pagani',m:'Huayra R',z:'2.7 s',t:'230 mph',hp:'838 hp',e:'v12r',c:'#c0a060',s:1},
+koenigsegg:{n:'Koenigsegg',m:'Jesko Absolut',z:'2.5 s',t:'330 mph',hp:'1600 hp',e:'v8f',c:'#6ee0a0',s:1}};
+const ENG={v8:[8,'sawtooth',500],v10:[10,'sawtooth',650],v12:[12,'sawtooth',800],ev:[0,'sine',3000],v12r:[12,'square',1300],v8f:[8,'square',900]};
+const NAMES={v8:'V8 growl',v10:'V10 scream',v12:'V12 howl',ev:'Electric hum',v12r:'RARE · V12 symphony',v8f:'RARE · Flat-plane V8'};
+let unlocked=[];
+function car(c){return`<svg viewBox="0 0 400 150" style="width:100%"><defs><linearGradient id="bd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="#0c0c0c"/></linearGradient></defs><path d="M22 112 Q26 92 70 86 L130 58 Q175 38 232 46 L290 74 Q352 82 378 106 Q384 118 372 120 L30 120 Q18 120 22 112Z" fill="url(#bd)" stroke="${c}" stroke-width="1.5"/><path d="M140 64 Q178 48 226 54 L270 76 L120 78Z" fill="#0b1118"/><g fill="#0a0a0a" stroke="#d9dce0" stroke-width="2.5"><circle cx="105" cy="120" r="22"/><circle cx="305" cy="120" r="22"/></g><g fill="#cfd3d8"><circle cx="105" cy="120" r="8"/><circle cx="305" cy="120" r="8"/></g></svg>`}
+
+/* ===== Result modal + Exhaust synthesizer + RPM gauge ===== */
+let AC,revStop=0;
+function show(k,fb){const b=B[k];$('card').innerHTML=`<div style="color:var(--accent);letter-spacing:.3em;font-size:.65rem;text-transform:uppercase">${fb?'Curated pick':b.s?'Secret unlocked':'Marque identified'}</div><h2 style="font-size:2rem;color:var(--accent)">${b.n} <small style="font-size:.9rem;color:var(--muted)">${b.m}</small></h2>
+<div style="background:radial-gradient(ellipse at 50% 100%,${b.c}44,transparent 70%);border-radius:12px">${car(b.c)}</div>
+<div class="stats"><div class="stat"><small>0–60 mph</small><b>${b.z}</b></div><div class="stat"><small>Top speed</small><b>${b.t}</b></div><div class="stat"><small>Power</small><b>${b.hp}</b></div><div class="stat"><small>Sound</small><b style="font-size:.7rem">${NAMES[b.e]}</b></div></div>
+<canvas id="rpm" width="320" height="150" style="width:100%;max-width:320px;display:block;margin:auto"></canvas>
+<div class="row" style="justify-content:center;margin-top:10px"><button class="on" id="rev">REV ENGINE</button><button id="cl">Close</button></div>`;
+$('modal').classList.add('show');$('cl').onclick=()=>{$('modal').classList.remove('show');revStop=1};$('rev').onclick=()=>rev(b.e);gauge(900)}
+function gauge(r){const c=$('rpm');if(!c)return;const g=c.getContext('2d');g.clearRect(0,0,320,150);const cx=160,cy=130,a0=Math.PI*1.05,a1=Math.PI*1.95;
+g.lineWidth=10;g.lineCap='round';g.strokeStyle='#fff2';g.beginPath();g.arc(cx,cy,100,a0,a1);g.stroke();
+g.strokeStyle=ACC;g.shadowColor=ACC;g.shadowBlur=14;g.beginPath();g.arc(cx,cy,100,a0,a0+(a1-a0)*r/8000);g.stroke();g.shadowBlur=0;
+const a=a0+(a1-a0)*r/8000;g.strokeStyle='#fff';g.lineWidth=3;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+Math.cos(a)*88,cy+Math.sin(a)*88);g.stroke();
+g.fillStyle='#fff';g.font='600 18px Inter';g.textAlign='center';g.fillText(Math.round(r)+' RPM',cx,cy+16)}
+function rev(type){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.resume()}catch(e){return}
+const[cyl,wave,ff]=ENG[type],o=AC.createOscillator(),o2=AC.createOscillator(),f=AC.createBiquadFilter(),g=AC.createGain();
+o.type=wave;o2.type=cyl?'square':'sine';f.type='lowpass';f.frequency.value=ff;g.gain.value=.0001;
+o.connect(f);o2.connect(f);f.connect(g);g.connect(AC.destination);o.start();o2.start();g.gain.exponentialRampToValueAtTime(.18,AC.currentTime+.1);
+const t0=performance.now();revStop=0;
+(function s(){const t=(performance.now()-t0)/1000;let r=t<1.4?900+6600*t/1.4:t<1.8?7500+Math.sin(t*90)*350:t<3.4?7500-6600*(t-1.8)/1.6:900;
+const fr=cyl?r/60*cyl/2:150+r*.3;o.frequency.value=fr;o2.frequency.value=cyl?fr*.5:fr*2;f.frequency.value=ff*(.5+r/8000);gauge(r);
+if(t<3.4&&!revStop)requestAnimationFrame(s);else{g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+.25);setTimeout(()=>{o.stop();o2.stop()},300);gauge(900)}})()}
+
+/* ===== Draw & Identify module ===== */
+const PD=mkPad($('pad'));hooks.draw={on:()=>PD.fit()};PD.fit();
+$('pclr').onclick=()=>{PD.clear();$('phint').textContent=''};
+$('pid').onclick=()=>{if(!PD.s.length){$('phint').textContent='Draw a logo first.';return}const k=classify(PD.s);$('phint').textContent=k?'Match: '+B[k].n:'No clear match — showing a curated pick.';show(k||'porsche',!k)};
+function gal(){$('gal').innerHTML='';Object.keys(B).filter(k=>B[k].s).forEach(k=>{const b=document.createElement('button');const u=unlocked.includes(k);b.textContent=(u?'★ ':'🔒 ')+B[k].n;b.onclick=()=>u?show(k):toast('Win the Logo Quiz to unlock');$('gal').appendChild(b)})}gal();
+
+/* ===== AR apparel try-on ===== */
+const arc=$('arc'),ax=arc.getContext('2d'),vid=$('vid');let cam=0,arOn=0,jk=0,stream;
+const JK=['Classic Black','Martini Racing','Gold Race Suit'];
+JK.forEach((n,i)=>{const b=document.createElement('button');b.textContent=n;b.className=i?'':'on';b.onclick=()=>{jk=i;[...$('jk').children].forEach((x,j)=>x.classList.toggle('on',j===i))};$('jk').appendChild(b)});
+function jacket(c,w,h){const s=$('sc').value/100*h/420,x=w/2+$('sx').value/100*w,y=h*.6+$('sy').value/100*h;
+c.save();c.translate(x,y);c.scale(s,s);c.globalAlpha=$('so').value/100;
+const P=new Path2D('M-70 -120 L70 -120 L150 -90 L190 125 L130 135 L112 -10 L112 175 L-112 175 L-112 -10 L-130 135 L-190 125 L-150 -90Z');
+const col=[['#151515','#222'],['#f4f4f4','#d52b1e'],['#c9a24a','#111']][jk];
+c.fillStyle=col[0];c.fill(P);c.strokeStyle=ACC;c.lineWidth=4;c.stroke(P);
+c.fillStyle=col[1];c.fillRect(-190,-20,300,0);
+[[-165,-60,-120,110],[120,-60,165,110]].forEach(a=>{c.save();c.strokeStyle=col[1];c.lineWidth=12;c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(a[2]<a[0]?a[2]-25:a[2]+25,a[3]);c.stroke();c.restore()});
+c.fillStyle=col[1];c.fillRect(-4,-120,8,295);c.fillStyle=ACC;c.font='600 22px Playfair Display';c.textAlign='center';c.fillText('911',70,-40);
+c.beginPath();c.moveTo(-50,-120);c.quadraticCurveTo(0,-80,50,-120);c.strokeStyle='#000';c.lineWidth=14;c.stroke();c.restore()}
+function arLoop(){if(!arOn)return;const w=arc.width,h=arc.height;ax.fillStyle='#0a0a0a';ax.fillRect(0,0,w,h);
+if(cam&&vid.videoWidth){const r=Math.max(w/vid.videoWidth,h/vid.videoHeight),dw=vid.videoWidth*r,dh=vid.videoHeight*r;ax.save();ax.translate(w,0);ax.scale(-1,1);ax.drawImage(vid,(w-dw)/2,(h-dh)/2,dw,dh);ax.restore()}
+else{ax.strokeStyle=ACC+'44';for(let i=0;i<w;i+=40){ax.beginPath();ax.moveTo(i,0);ax.lineTo(i,h);ax.stroke()}
+ax.fillStyle='#ffffff10';ax.beginPath();ax.arc(w/2,h*.28,h*.1,0,7);ax.fill();ax.beginPath();ax.ellipse(w/2,h*.75,h*.3,h*.4,0,Math.PI,0);ax.fill()}
+jacket(ax,w,h);ax.strokeStyle=ACC;ax.lineWidth=3;ax.shadowColor=ACC;ax.shadowBlur=16;ax.strokeRect(2,2,w-4,h-4);ax.shadowBlur=0;requestAnimationFrame(arLoop)}
+hooks.ar={on(){arc.width=arc.clientWidth;arc.height=arc.clientHeight;if(!arOn){arOn=1;arLoop()}
+if(!stream&&!cam){const md=navigator.mediaDevices;if(!md||!md.getUserMedia){$('armsg').textContent='Camera API unavailable — showing a mannequin preview. Jacket controls still work.';return}
+md.getUserMedia({video:{facingMode:'user'},audio:false}).then(s=>{stream=s;vid.srcObject=s;vid.play();cam=1;$('armsg').textContent='Camera live. Align the jacket with the sliders.'}).catch(e=>{$('armsg').textContent='Camera blocked ('+(e.name||'error')+'). Showing a mannequin preview — allow camera access to try on live.'})}},
+off(){arOn=0;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;cam=0}}};
+$('shot').onclick=()=>{const s=$('snap');s.src=arc.toDataURL('image/png');s.style.display='block';toast('Snapshot — long-press / right-click to save');s.onclick=()=>s.style.display='none'};
+
+/* ===== Three.js configurator ===== */
+let ring,rim,ren,scn,cam3,grp,body,spin=0,ready=0,drag=0,tOn=0;
+function init3(){if(ready||!window.THREE)return;ready=1;const cv=$('cfgc');ren=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+scn=new THREE.Scene();cam3=new THREE.PerspectiveCamera(40,1,.1,100);cam3.position.set(6,2.6,6);cam3.lookAt(0,.6,0);
+scn.add(new THREE.AmbientLight(0xffffff,.5));const d=new THREE.DirectionalLight(0xffffff,1);d.position.set(5,8,4);scn.add(d);rim=new THREE.PointLight(ACC,1.4,20);rim.position.set(-4,1.5,-3);scn.add(rim);
+body=new THREE.MeshStandardMaterial({color:0x111111,metalness:.9,roughness:.25});const gl=new THREE.MeshStandardMaterial({color:0x0a1218,metalness:1,roughness:.05}),tire=new THREE.MeshStandardMaterial({color:0x080808}),metal=new THREE.MeshStandardMaterial({color:0xcfd3d8,metalness:1,roughness:.2});
+grp=new THREE.Group();const add=(g,m,x,y,z)=>{const o=new THREE.Mesh(g,m);o.position.set(x,y,z);grp.add(o);return o};
+add(new THREE.BoxGeometry(4.4,.55,1.9),body,0,.55,0);add(new THREE.BoxGeometry(2.4,.2,1.8),body,.9,.9,0);
+const cab=add(new THREE.BoxGeometry(1.9,.55,1.5),gl,-.25,1.1,0);cab.scale.set(1,1,.95);add(new THREE.BoxGeometry(1.5,.12,1.3),body,-.3,1.42,0);
+add(new THREE.BoxGeometry(.3,.1,2),body,-2.1,1.05,0);
+[[1.4,.38,1.05],[1.4,.38,-1.05],[-1.4,.38,1.05],[-1.4,.38,-1.05]].forEach(p=>{const t=add(new THREE.CylinderGeometry(.42,.42,.32,28),tire,...p);t.rotation.x=Math.PI/2;const r=add(new THREE.CylinderGeometry(.27,.27,.34,18),metal,...p);r.rotation.x=Math.PI/2});
+add(new THREE.BoxGeometry(.05,.1,.5),new THREE.MeshBasicMaterial({color:0xfff8d0}),2.2,.7,.55);add(new THREE.BoxGeometry(.05,.1,.5),new THREE.MeshBasicMaterial({color:0xfff8d0}),2.2,.7,-.55);
+scn.add(grp);ring=new THREE.Mesh(new THREE.RingGeometry(3.4,3.5,64),new THREE.MeshBasicMaterial({color:ACC,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.02;scn.add(ring);
+const fl=new THREE.Mesh(new THREE.CircleGeometry(3.4,64),new THREE.MeshStandardMaterial({color:0x111111,metalness:.8,roughness:.4}));fl.rotation.x=-Math.PI/2;scn.add(fl);
+let px;cv.onpointerdown=e=>{drag=1;px=e.clientX;cv.setPointerCapture(e.pointerId)};cv.onpointermove=e=>{if(drag){grp.rotation.y+=(e.clientX-px)*.01;px=e.clientX}};cv.onpointerup=()=>drag=0}
+function loop3(){if(!tOn)return;if(!drag)grp.rotation.y+=.004;ren.render(scn,cam3);requestAnimationFrame(loop3)}
+hooks.cfg={on(){init3();if(!ready)return;const cv=$('cfgc');ren.setSize(cv.clientWidth,cv.clientHeight,false);cam3.aspect=cv.clientWidth/cv.clientHeight;cam3.updateProjectionMatrix();if(!tOn){tOn=1;loop3()}},off(){tOn=0}};
+[['Midnight Black',0x111111,.9,.25],['Crimson Pearl',0xaa0e25,.8,.2],['Matte Gold',0xb8922e,.4,.65],['Electric Cyan',0x00d4ff,.85,.2]].forEach(p=>{const b=document.createElement('button');b.className='sw';b.style.background='#'+p[1].toString(16).padStart(6,'0');b.title=p[0];b.onclick=()=>{if(!body)return;body.color.setHex(p[1]);body.metalness=p[2];body.roughness=p[3];$('pname').textContent=p[0]};$('paints').appendChild(b)});
+if(!window.THREE)$('pname').textContent='Three.js failed to load — check connection.';
+
+/* ===== HUD mini-game ===== */
+const gc=$('game'),g=gc.getContext('2d'),W=360,H=560,LN=[70,180,290];
+let run=0,score=0,best=0,spd=0,obs=[],gem=[],lane=1,px2=180,pvx=0,gf=0,turbo=100,boost=0,spT=0,ly=0,lt=0,kph=1;
+try{best=+localStorage.getItem('dashBest2')||0}catch(e){}
+function gear(n){[...$('gears').children].forEach((s,i)=>s.classList.toggle('on',i===n))}
+function cr(x,y,c,w=40,h=72){g.save();g.translate(x,y);g.shadowColor=c;g.shadowBlur=16;g.fillStyle=c;g.beginPath();g.roundRect(-w/2,-h/2,w,h,12);g.fill();g.shadowBlur=0;g.fillStyle='#0b1118';g.beginPath();g.roundRect(-w/2+6,-h/2+20,w-12,22,6);g.fill();g.fillStyle='#fff8d0';g.fillRect(-w/2+4,-h/2+2,9,4);g.fillRect(w/2-13,-h/2+2,9,4);g.restore()}
+function gstart(){obs=[];gem=[];score=0;spd=260;lane=1;px2=180;turbo=100;run=1;$('ov').style.display='none';gear(2);lt=performance.now();requestAnimationFrame(gl2)}
+function gend(){run=0;gear(0);if(score>best){best=Math.floor(score);try{localStorage.setItem('dashBest2',best)}catch(e){}}$('ovt').textContent='Crashed — '+Math.floor(score);$('gs').textContent='Restart';$('ov').style.display='grid'}
+function gl2(t){if(!run)return;const dt=Math.min((t-lt)/1000,.05);lt=t;boost=keys[' ']&&turbo>1?1:0;spd+=dt*5;const sp=spd*(boost?1.45:1);
+turbo=Math.max(0,Math.min(100,turbo+(boost?-35:8)*dt));gear(boost?3:2);
+const ox=px2;px2+=(LN[lane]-px2)*Math.min(1,dt*12);gf+=((px2-ox)/dt/500-gf)*.2;
+spT-=dt;if(spT<=0){spT=Math.max(.4,1.1-sp/900);const l=Math.floor(Math.random()*3);Math.random()<.3?gem.push({x:LN[l],y:-30}):obs.push({x:LN[l],y:-60,c:['#3a3d44','#5a1f26','#1f3a5a'][Math.floor(Math.random()*3)]})}
+obs.forEach(o=>o.y+=sp*.75*dt);gem.forEach(o=>o.y+=sp*.75*dt);ly=(ly+sp*dt)%80;score+=dt*(boost?20:10);const py=H-110;
+for(const o of obs)if(Math.abs(o.x-px2)<34&&Math.abs(o.y-py)<66)return gend();
+gem=gem.filter(o=>{if(Math.abs(o.x-px2)<30&&Math.abs(o.y-py)<44){score+=50;turbo=Math.min(100,turbo+20);return false}return o.y<H+40});obs=obs.filter(o=>o.y<H+80);
+g.fillStyle='#070707';g.fillRect(0,0,W,H);g.fillStyle='#121316';g.fillRect(20,0,320,H);const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,ACC);gr.addColorStop(1,'#27e1ff');g.fillStyle=gr;g.shadowColor=ACC;g.shadowBlur=14;g.fillRect(16,0,4,H);g.fillRect(340,0,4,H);g.shadowBlur=0;
+g.fillStyle='#ffffff55';for(let y=-80+ly;y<H;y+=80){g.fillRect(124,y,4,40);g.fillRect(234,y,4,40)}
+gem.forEach(o=>{g.save();g.translate(o.x,o.y);g.rotate(Math.PI/4);g.shadowColor=ACC;g.shadowBlur=20;g.fillStyle=STROKE;g.fillRect(-10,-10,20,20);g.restore()});
+obs.forEach(o=>cr(o.x,o.y,o.c,38,70));if(boost){g.fillStyle=ACC+'55';g.fillRect(px2-14,py+36,28,40+Math.random()*30)}cr(px2,py,ACC);
+const k=sp*.8*(kph?1:.621);$('kph').textContent=Math.round(k);$('tb').style.width=turbo+'%';$('gi').style.height=Math.min(100,Math.abs(gf)*100)+'%';$('gi').style.left=gf>0?'50%':'auto';$('gi').style.right=gf<=0?'50%':'auto';$('gi').style.width='50%';
+$('sc2').textContent=Math.floor(score)+' · '+best;requestAnimationFrame(gl2)}
+const keys={};addEventListener('keydown',e=>{if(['ArrowLeft','a','A'].includes(e.key))lane=Math.max(0,lane-1);if(['ArrowRight','d','D'].includes(e.key))lane=Math.min(2,lane+1);if(e.key===' '){keys[' ']=1;e.preventDefault()}});addEventListener('keyup',e=>{if(e.key===' ')keys[' ']=0});
+$('gl').onpointerdown=()=>lane=Math.max(0,lane-1);$('gr').onpointerdown=()=>lane=Math.min(2,lane+1);$('gt').onpointerdown=()=>keys[' ']=1;$('gt').onpointerup=()=>keys[' ']=0;
+gc.onpointerdown=e=>{const r=gc.getBoundingClientRect();lane=Math.max(0,Math.min(2,Math.floor((e.clientX-r.left)/r.width*3)))};
+$('gs').onclick=gstart;$('unit').onclick=()=>{kph=!kph;$('unit').textContent=kph?'KPH':'MPH'};
+hooks.game={off(){run=0}};$('sc2').textContent='0 · '+best;
+
+/* ===== Logo Quiz / Memory Challenge ===== */
+const QP=mkPad($('qpad'));hooks.quiz={on:()=>QP.fit(),off:()=>{clearInterval(qt)}};let qt,target,left=0;
+function qend(msg){clearInterval(qt);left=0;$('qres').textContent=msg}
+$('qs').onclick=()=>{QP.fit();const ks=['porsche','mercedes','bmw','audi','ferrari','lamborghini','tesla'];target=ks[Math.floor(Math.random()*ks.length)];
+$('clue').innerHTML='<b style="color:var(--accent)">Clue:</b> '+B[target].clue+' <br>Draw it from memory!';$('qres').textContent='';left=15;$('tm').textContent=left;clearInterval(qt);
+qt=setInterval(()=>{left--;$('tm').textContent=Math.max(left,0);if(left<=0)qend('Time up! It was '+B[target].n+'.')},1000)};
+$('qd').onclick=()=>{if(!left)return;const k=classify(QP.s);if(k===target){qend('Perfect — '+B[target].n+'!');const lock=Object.keys(B).find(x=>B[x].s&&!unlocked.includes(x));if(lock){unlocked.push(lock);gal();toast('Unlocked: '+B[lock].n+' + '+NAMES[B[lock].e]);setTimeout(()=>show(lock),900)}else toast('All secrets unlocked!')}else $('qres').textContent=k?'That looked like '+B[k].n+'. Try again!':'Not recognised — keep going!'};
+$('qc').onclick=()=>QP.clear();
+theme(0);
+</script></body></html>
